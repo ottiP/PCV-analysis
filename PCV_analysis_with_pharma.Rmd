@@ -11,15 +11,48 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(table1)
 library(dplyr)
+library(ggplot2)
+library(GGally)
 ```
 
 ```{r}
 ### Load the data: 
 core_table <- read.csv("./Data/core_table_filled.csv")
 core_table_norace <- read.csv("./Data/core_table_droprace_filled.csv")
-supp_table_filled <- read.csv("./Data/suppl_table_filled.csv")
+supp_table_filled <- read.csv("~/Documents/Data_pharma/suppl_table_filled.csv")
 supp_table_6mo_filled <- read.csv("./Data/suppl_6mo_table_filled.csv")
 ```
+
+## Check that individuals are the same across dataframes
+```{r}
+print(paste0("Total number of individuals: "))
+sum(core_table$count)
+print("\n")
+sum(core_table_norace$count)
+print("\n")
+sum(supp_table_filled$count)
+print("\n")
+sum(supp_table_6mo_filled$count)
+```
+
+## Exploratory analysis: descriptive stats
+```{r}
+Tot_ind <- sum(supp_table_filled$count)
+vax_by_age<-supp_table_filled %>% group_by(age,PCV_combined) %>% summarise(prop = sum(count)/Tot_ind)
+vax_by_com<-supp_table_filled %>% group_by(comorbidities,PCV_combined) %>% summarise(prop = sum(count)/Tot_ind)
+
+```
+
+## Plot histograms
+```{r}
+ggplot(vax_by_age,aes(age,prop,fill=PCV_combined))+
+  geom_bar(stat="identity",position='dodge')
+ggplot(vax_by_com,aes(comorbidities,prop,fill=PCV_combined))+
+  geom_bar(stat="identity",position='dodge')
+```
+
+
+
 
 ## First step is to create another columnn of no response
 ```{r}
@@ -35,7 +68,6 @@ data_comb<-merge(data1,data2,by=c("year_month","age","patient_gender_code","race
 
 ```{r}
 ## Exploratory analysis of the dataset: 
-print(paste0("Total number of individuals: ",sum(data$count)))
 print(paste0("PCV13 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_only"])/sum(data$count)))
 print(paste0("PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PPSV23_10yrs"])/sum(data$count)))
 print(paste0("PCV13 and PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_PPSV23_10yrs"])/sum(data$count)))
@@ -58,6 +90,14 @@ m1<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined
 #summary(m1)
 m1.ci<-confint(m1)
 ```
+##Check collinearity among the covariates using pair-wise correlation matrix
+```{r}
+X<-data_comb[,2:10]
+ggpairs(X)
+
+```
+
+
 
 ```{r}
 m1.table <- cbind(coef(m1),m1.ci)
