@@ -1,0 +1,206 @@
+---
+title: "PCV_analysis -- Dataset 1 and 2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load required R packages
+```{r}
+library(table1)
+library(dplyr)
+library(ggplot2)
+#library(GGally)
+library(car)
+```
+
+```{r}
+### Load the data: 
+core_table <- read.csv("./Data/core_table_filled.csv")
+core_table_norace <- read.csv("./Data/core_table_droprace_filled.csv")
+```
+
+## Check that individuals are the same across dataframes
+```{r}
+print(paste0("Total number of individuals: "))
+sum(core_table$count)
+print("\n")
+sum(core_table_norace$count)
+```
+## Factor variables in the data
+```{r}
+## Factor categorical variable and change reference level for race (set White as the ref level)
+col_names <- c("age","patient_gender_code","race_code","income_est_mod","PCV_combined")
+supp_table_filled[col_names] <- lapply(supp_table_filled[col_names], factor)
+supp_table_filled$race_code <- relevel(supp_table_filled$race_code,ref="W")
+supp_table_filled$PCV_combined <- relevel(supp_table_filled$PCV_combined,ref="U")
+```
+
+## First step is to create another columnn of no response
+```{r}
+### Prepare the data and do some exploration
+#baseline demographic characteristics (Table 1)
+data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","resp_severe"),]
+data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
+data2 <- supp_table_filled[supp_table_filled$COVID_severity =="resp_severe",]
+data_comb<-merge(data1,data2,by=c("year_month","age","patient_gender_code","race_code","PCV_combined","flu_vacc","zoster_vacc","bmi_30_plus","comorbidities","income_est_mod"))
+```
+
+```{r}
+## Exploratory analysis of the dataset: 
+print(paste0("PCV13 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_only"])/sum(data$count)))
+print(paste0("PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PPSV23_10yrs"])/sum(data$count)))
+print(paste0("PCV13 and PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_PPSV23_10yrs"])/sum(data$count)))
+print(paste0("Unknown PCV vaccine coverage: ",sum(data$count[data$PCV_combined=="U"])/sum(data$count)))
+print(paste0("Flu vaccine: ",sum(data$count[data$"flu_vacc"=="TRUE"])/sum(data$count)))
+print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum(data$count)))
+```
+
+## Run the first logistic regression analysis looking at outcome: severe respiratory outcome for Covid-19 versus non-severe outcomes
+```{r}
+m1<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
+#summary(m1)
+m1.ci<-confint(m1)
+```
+
+```{r}
+m1.table <- cbind(coef(m1),m1.ci)
+colnames(m1.table) <- c("estimate","lower","upper")
+m1.table <- exp(m1.table)
+View(m1.table)
+```
+
+##Check collinearity among the covariates using variance inflation factor (VIF): VIF answers the question: "How well is one of my covariates x_i explained by all other covariates x jointly?".
+The VIF is defined as 1/(1-R_squared); this means that for VIF>=10, this specific covariate is explained by all other covariates to a large extent (~90%). There could be a problem of collinearity.
+
+```{r}
+#X<-data_comb[,2:10]
+#ggpairs(X)
+vif(m1)
+```
+
+
+## Second part of the analysis: restrict to people with severe non-respiratory vs non-severe outcomes for Covid-19
+```{r}
+### Prepare the data and do some exploration
+#baseline demographic characteristics (Table 1)
+data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","non_resp_severe"),]
+data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
+data2 <- supp_table_filled[supp_table_filled$COVID_severity =="non_resp_severe",]
+data_comb<-merge(data1,data2,by=c("year_month","age","patient_gender_code","race_code","PCV_combined","flu_vacc","zoster_vacc","bmi_30_plus","comorbidities","income_est_mod"))
+```
+
+```{r}
+## Exploratory analysis of the dataset: 
+print(paste0("Total number of individuals: ",sum(data$count)))
+print(paste0("PCV13 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_only"])/sum(data$count)))
+print(paste0("PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PPSV23_10yrs"])/sum(data$count)))
+print(paste0("PCV13 and PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_PPSV23_10yrs"])/sum(data$count)))
+print(paste0("Unknown PCV vaccine coverage: ",sum(data$count[data$PCV_combined=="U"])/sum(data$count)))
+print(paste0("Flu vaccine: ",sum(data$count[data$"flu_vacc"=="TRUE"])/sum(data$count)))
+print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum(data$count)))
+```
+
+## Logistic regression
+```{r}
+m2<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
+#summary(m2)
+m2.ci<-confint(m2)
+```
+
+##Check collinearity
+```{r}
+vif(m2)
+```
+
+
+```{r}
+m2.table <- cbind(coef(m2),m2.ci)
+colnames(m2.table) <- c("estimate","lower","upper")
+m2.table <- exp(m2.table)
+View(m2.table)
+```
+
+## Third part of the analysis: restrict to people with ICU critical care vs non-severe outcomes for Covid-19
+```{r}
+### Prepare the data and do some exploration
+#baseline demographic characteristics (Table 1)
+data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","ICU_crit_care"),]
+data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
+data2 <- supp_table_filled[supp_table_filled$COVID_severity =="ICU_crit_care",]
+data_comb<-merge(data1,data2,by=c("year_month","age","patient_gender_code","race_code","PCV_combined","flu_vacc","zoster_vacc","bmi_30_plus","comorbidities","income_est_mod"))
+```
+
+```{r}
+## Exploratory analysis of the dataset: 
+print(paste0("Total number of individuals: ",sum(data$count)))
+print(paste0("PCV13 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_only"])/sum(data$count)))
+print(paste0("PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PPSV23_10yrs"])/sum(data$count)))
+print(paste0("PCV13 and PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_PPSV23_10yrs"])/sum(data$count)))
+print(paste0("Unknown PCV vaccine coverage: ",sum(data$count[data$PCV_combined=="U"])/sum(data$count)))
+print(paste0("Flu vaccine: ",sum(data$count[data$"flu_vacc"=="TRUE"])/sum(data$count)))
+print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum(data$count)))
+```
+
+## Logistic regression
+```{r}
+m3<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
+#summary(m3)
+m3.ci<-confint(m3)
+```
+
+```{r}
+m3.table <- cbind(coef(m3),m3.ci)
+colnames(m3.table) <- c("estimate","lower","upper")
+m3.table <- exp(m3.table)
+View(m3.table)
+```
+
+##Check collinearity
+```{r}
+vif(m3)
+```
+
+## Fourth part of the analysis: restrict to people with ICU critical care vs respiratory severe outcomes for Covid-19
+```{r}
+### Prepare the data and do some exploration
+#baseline demographic characteristics (Table 1)
+data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("ICU_crit_care","resp_severe"),]
+data1 <- supp_table_filled[supp_table_filled$COVID_severity == "ICU_crit_care",]
+data2 <- supp_table_filled[supp_table_filled$COVID_severity =="resp_severe",]
+data_comb<-merge(data1,data2,by=c("year_month","age","patient_gender_code","race_code","PCV_combined","flu_vacc","zoster_vacc","bmi_30_plus","comorbidities","income_est_mod"))
+```
+
+```{r}
+## Exploratory analysis of the dataset: 
+print(paste0("Total number of individuals: ",sum(data$count)))
+print(paste0("PCV13 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_only"])/sum(data$count)))
+print(paste0("PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PPSV23_10yrs"])/sum(data$count)))
+print(paste0("PCV13 and PPSV23 vaccine coverage: ",sum(data$count[data$PCV_combined=="PCV13_PPSV23_10yrs"])/sum(data$count)))
+print(paste0("Unknown PCV vaccine coverage: ",sum(data$count[data$PCV_combined=="U"])/sum(data$count)))
+print(paste0("Flu vaccine: ",sum(data$count[data$"flu_vacc"=="TRUE"])/sum(data$count)))
+print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum(data$count)))
+```
+
+## Logistic regression
+```{r}
+m4<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
+#summary(m4)
+m4.ci<-confint(m4)
+```
+
+```{r}
+m4.table <- cbind(coef(m4),m4.ci)
+colnames(m4.table) <- c("estimate","lower","upper")
+m4.table <- exp(m4.table)
+View(m4.table)
+```
+
+##Check collinearity
+```{r}
+vif(m4)
+```
+
+

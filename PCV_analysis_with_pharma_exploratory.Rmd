@@ -1,0 +1,50 @@
+---
+title: "PCV_analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load required R packages
+```{r}
+library(table1)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+### Load the data: 
+core_table <- read.csv("./Data/core_table_filled.csv")
+core_table_norace <- read.csv("./Data/core_table_droprace_filled.csv")
+supp_table_filled <-read.csv("~/Documents/Ottavia/Data_pharma/suppl_table_filled.csv")
+supp_table_6mo_filled <- read.csv("./Data/suppl_6mo_table_filled.csv")
+```
+
+## Check that individuals are the same across dataframes
+```{r}
+print(paste0("Total number of individuals: "))
+sum(core_table$count)
+print("\n")
+sum(core_table_norace$count)
+print("\n")
+sum(supp_table_filled$count)
+print("\n")
+sum(supp_table_6mo_filled$count)
+```
+
+## Exploratory analysis: descriptive stats
+```{r}
+Tot_ind <- sum(supp_table_filled$count)
+vax_by_age<-supp_table_filled %>% group_by(age,PCV_combined) %>% summarise(prop = sum(count)/Tot_ind)
+vax_by_com<-supp_table_filled %>% group_by(comorbidities,PCV_combined) %>% summarise(prop = sum(count)/Tot_ind)
+```
+
+## Plot histograms
+```{r}
+ggplot(vax_by_age,aes(age,prop,fill=PCV_combined))+
+  geom_bar(stat="identity",position='dodge')
+ggplot(vax_by_com,aes(comorbidities,prop,fill=PCV_combined))+
+  geom_bar(stat="identity",position='dodge')
+```
