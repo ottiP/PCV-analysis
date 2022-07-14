@@ -19,7 +19,7 @@ library(GGally)
 ### Load the data: 
 core_table <- read.csv("./Data/core_table_filled.csv")
 core_table_norace <- read.csv("./Data/core_table_droprace_filled.csv")
-supp_table_filled <- read.csv("~/Documents/Data_pharma/suppl_table_filled.csv")
+supp_table_filled <-read.csv("~/Documents/Ottavia/Data_pharma/suppl_table_filled.csv")
 supp_table_6mo_filled <- read.csv("./Data/suppl_6mo_table_filled.csv")
 ```
 
@@ -50,9 +50,6 @@ ggplot(vax_by_age,aes(age,prop,fill=PCV_combined))+
 ggplot(vax_by_com,aes(comorbidities,prop,fill=PCV_combined))+
   geom_bar(stat="identity",position='dodge')
 ```
-
-
-
 
 ## First step is to create another columnn of no response
 ```{r}
