@@ -40,7 +40,6 @@ sum(supp_table_6mo_filled$count)
 Tot_ind <- sum(supp_table_filled$count)
 vax_by_age<-supp_table_filled %>% group_by(age,PCV_combined) %>% summarise(prop = sum(count)/Tot_ind)
 vax_by_com<-supp_table_filled %>% group_by(comorbidities,PCV_combined) %>% summarise(prop = sum(count)/Tot_ind)
-
 ```
 
 ## Plot histograms
@@ -50,13 +49,21 @@ ggplot(vax_by_age,aes(age,prop,fill=PCV_combined))+
 ggplot(vax_by_com,aes(comorbidities,prop,fill=PCV_combined))+
   geom_bar(stat="identity",position='dodge')
 ```
+## Factor variables in the data
+```{r}
+## Factor categorical variable and change reference level for race (set White as the ref level)
+col_names <- c("age","patient_gender_code","race_code","income_est_mod","PCV_combined")
+supp_table_filled[col_names] <- lapply(supp_table_filled[col_names], factor)
+supp_table_filled$race_code <- relevel(supp_table_filled$race_code,ref="W")
+supp_table_filled$PCV_combined <- relevel(supp_table_filled$PCV_combined,ref="U")
+```
+
+
 
 ## First step is to create another columnn of no response
 ```{r}
 ### Prepare the data and do some exploration
 #baseline demographic characteristics (Table 1)
-supp_table_filled$age <- as.factor(core_table$age)
-supp_table_filled$patient_gender_code <- as.factor(core_table$patient_gender_code)
 data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","resp_severe"),]
 data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
 data2 <- supp_table_filled[supp_table_filled$COVID_severity =="resp_severe",]
@@ -74,14 +81,6 @@ print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum
 ```
 
 ## Run the first logistic regression analysis looking at outcome: severe respiratory outcome for Covid-19 versus non-severe outcomes
-```{r}
-## Factor categorical variable and change reference level for race (set White as the ref level)
-col_names <- c("patient_gender_code","race_code","income_est_mod","PCV_combined")
-data_comb[col_names] <- lapply(data_comb[col_names], factor)
-data_comb$race_code <- relevel(data_comb$race_code,ref="W")
-data_comb$PCV_combined <- relevel(data_comb$PCV_combined,ref="U")
-```
-
 ```{r}
 m1<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
 #summary(m1)
@@ -108,8 +107,6 @@ View(m1.table)
 ```{r}
 ### Prepare the data and do some exploration
 #baseline demographic characteristics (Table 1)
-supp_table_filled$age <- as.factor(core_table$age)
-supp_table_filled$patient_gender_code <- as.factor(core_table$patient_gender_code)
 data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","non_resp_severe"),]
 data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
 data2 <- supp_table_filled[supp_table_filled$COVID_severity =="non_resp_severe",]
@@ -129,14 +126,6 @@ print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum
 
 ## Run the first logistic regression analysis looking at outcome: severe respiratory outcome for Covid-19 versus non-severe respiratory outcome
 ```{r}
-## Factor categorical variable and change reference level for race (set White as the ref level)
-col_names <- c("patient_gender_code","race_code","income_est_mod","PCV_combined")
-data_comb[col_names] <- lapply(data_comb[col_names], factor)
-data_comb$race_code <- relevel(data_comb$race_code,ref="W")
-data_comb$PCV_combined <- relevel(data_comb$PCV_combined,ref="U")
-```
-
-```{r}
 m2<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
 #summary(m2)
 m2.ci<-confint(m2)
@@ -153,8 +142,6 @@ View(m2.table)
 ```{r}
 ### Prepare the data and do some exploration
 #baseline demographic characteristics (Table 1)
-supp_table_filled$age <- as.factor(core_table$age)
-supp_table_filled$patient_gender_code <- as.factor(core_table$patient_gender_code)
 data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","ICU_crit_care"),]
 data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
 data2 <- supp_table_filled[supp_table_filled$COVID_severity =="ICU_crit_care",]
@@ -174,14 +161,6 @@ print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum
 
 ## Run the first logistic regression analysis looking at outcome: severe respiratory outcome for Covid-19 versus non-severe respiratory outcome
 ```{r}
-## Factor categorical variable and change reference level for race (set White as the ref level)
-col_names <- c("patient_gender_code","race_code","income_est_mod","PCV_combined")
-data_comb[col_names] <- lapply(data_comb[col_names], factor)
-data_comb$race_code <- relevel(data_comb$race_code,ref="W")
-data_comb$PCV_combined <- relevel(data_comb$PCV_combined,ref="U")
-```
-
-```{r}
 m3<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
 #summary(m3)
 m3.ci<-confint(m3)
@@ -198,8 +177,6 @@ View(m3.table)
 ```{r}
 ### Prepare the data and do some exploration
 #baseline demographic characteristics (Table 1)
-supp_table_filled$age <- as.factor(core_table$age)
-supp_table_filled$patient_gender_code <- as.factor(core_table$patient_gender_code)
 data <- supp_table_filled[supp_table_filled$COVID_severity %in% c("ICU_crit_care","resp_severe"),]
 data1 <- supp_table_filled[supp_table_filled$COVID_severity == "ICU_crit_care",]
 data2 <- supp_table_filled[supp_table_filled$COVID_severity =="resp_severe",]
@@ -218,14 +195,6 @@ print(paste0("Zooster vaccine: ",sum(data$count[data$"zoster_vacc"=="TRUE"])/sum
 ```
 
 ## Run the first logistic regression analysis looking at outcome: severe respiratory outcome for Covid-19 versus non-severe respiratory outcome
-```{r}
-## Factor categorical variable and change reference level for race (set White as the ref level)
-col_names <- c("patient_gender_code","race_code","income_est_mod","PCV_combined")
-data_comb[col_names] <- lapply(data_comb[col_names], factor)
-data_comb$race_code <- relevel(data_comb$race_code,ref="W")
-data_comb$PCV_combined <- relevel(data_comb$PCV_combined,ref="U")
-```
-
 ```{r}
 m4<-glm(cbind(count.x, count.y) ~ age+patient_gender_code+race_code+PCV_combined+flu_vacc+zoster_vacc+bmi_30_plus+comorbidities+income_est_mod, data=data_comb, family = binomial("logit"))
 #summary(m4)

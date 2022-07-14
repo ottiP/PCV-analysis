@@ -1,8 +1,8 @@
-data[data$year_month=="2021-12" & data$age=="1" & data$patient_gender_code=="F"&data$race_code=="U"&data$PCV_combined=="U"&data$flu_vacc
+data[data$year_month=="2021-12" & data$age=="0" & data$patient_gender_code=="F"&data$race_code=="U"&data$PCV_combined=="U"&data$flu_vacc
      =="FALSE"&data$zoster_vacc=="FALSE"&data$bmi_30_plus=="FALSE"&data$comorbidities=="FALSE"&data$income_est_mod=="U",]
 
 
-data_comb[data_comb$year_month=="2021-12" & data_comb$age=="1" & data_comb$patient_gender_code=="F"&data_comb$race_code=="U"&data_comb$PCV_combined=="U"&data_comb$flu_vacc
+data_comb[data_comb$year_month=="2021-12" & data_comb$age=="0" & data_comb$patient_gender_code=="F"&data_comb$race_code=="U"&data_comb$PCV_combined=="U"&data_comb$flu_vacc
      =="FALSE"&data_comb$zoster_vacc=="FALSE"&data_comb$bmi_30_plus=="FALSE"&data_comb$comorbidities=="FALSE"&data_comb$income_est_mod=="U",]
 
 
