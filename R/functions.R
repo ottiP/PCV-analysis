@@ -1,6 +1,6 @@
 run_model <- function(df,list_cov,list_out)
   {## Convert columns of list_cov to factors
-  colnames <- list_cov
+  col_names <- list_cov
   df[col_names] <- lapply(df[col_names], factor)
   df$race_code <- relevel(df$race_code,ref="W")
   df$PCV_combined <- relevel(df$PCV_combined,ref="U")
@@ -9,6 +9,9 @@ run_model <- function(df,list_cov,list_out)
   data1 <- df[df$COVID_severity == list_out[1],]
   data2 <- df[df$COVID_severity ==list_out[2],]
   data_comb<-merge(data1,data2,by=c("year_month",list_cov))
+  ## 
+  if(sum(df$count)==sum(data_comb$count.x)+sum(data_comb$count.y)){print("OK")}
+  else print("ERROR")
   ## Run logistic regression model
   data_comb$COVID_severity.x<-NULL
   data_comb$COVID_severity.y<-NULL
