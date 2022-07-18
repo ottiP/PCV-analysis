@@ -47,6 +47,16 @@ data1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
 data2 <- supp_table_filled[supp_table_filled$COVID_severity =="resp_severe",]
 data_comb<-merge(data1,data2,by=c("year_month","age","patient_gender_code","race_code","PCV_combined","flu_vacc","zoster_vacc","bmi_30_plus","comorbidities","income_est_mod"))
 ```
+```{r}
+d <- supp_table_filled[supp_table_filled$COVID_severity %in% c("non_severe","resp_severe"),]
+d1 <- supp_table_filled[supp_table_filled$COVID_severity == "non_severe",]
+d2 <- supp_table_filled[supp_table_filled$COVID_severity =="resp_severe",]
+d_comb<-merge(d1,d2,by=c("year_month","age","patient_gender_code","race_code","PCV_combined","flu_vacc","zoster_vacc","bmi_30_plus","comorbidities","income_est_mod"))
+
+```
+
+
+
 
 ```{r}
 ## Exploratory analysis of the dataset: 

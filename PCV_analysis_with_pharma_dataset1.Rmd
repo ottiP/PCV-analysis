@@ -32,13 +32,13 @@ sum(core_table_norace$count)
 ```
 ## Define covariates
 ```{r}
-list_cov <- c("year_month","age","patient_gender_code","race_code","PCV_combined")
+list_cov <- c("age","patient_gender_code","race_code","PCV_combined")
 ```
 
 
 ## Run the first logistic regression analysis looking at outcome: severe respiratory outcome for Covid-19 versus non-severe outcomes
 ```{r}
-list_out <- c("non_severe","resp_severe")
+list_out <- c("resp_severe","non_severe")
 m1<-run_model(core_table,list_cov,list_out)
 View(m1$m.table)
 ```
@@ -49,7 +49,7 @@ m1$vif
 ```
 ## Second part of the analysis: restrict to people with severe non-respiratory vs non-severe outcomes for Covid-19
 ```{r}
-list_out <- c("non_severe","non_resp_severe")
+list_out <- c("non_resp_severe","non_severe")
 m2<-run_model(core_table,list_cov,list_out)
 View(m2$m.table)
 ```
@@ -60,7 +60,7 @@ m2$vif
 
 ## Third part of the analysis: restrict to people with ICU critical care vs non-severe outcomes for Covid-19
 ```{r}
-list_out <- c("non_severe","ICU_crit_care")
+list_out <- c("ICU_crit_care","non_severe")
 m3<-run_model(core_table,list_cov,list_out)
 View(m3$m.table)
 ```
