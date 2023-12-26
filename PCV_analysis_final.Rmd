@@ -1,0 +1,293 @@
+---
+title: "PCV analysis final"
+author: "Dan Weinberger & Ottavia Prunas"
+date: '2023-11-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(duckdb)
+library(arrow)
+library(lubridate)
+library(reshape2)
+library(vtable)
+library(tidyr)
+#library(plyr)
+library(data.table)
+```
+
+```{r}
+a1_stream <- open_dataset("./Data/PCV_COVID_export_table.csv", format = "csv") %>%
+     to_duckdb() %>% 
+mutate(COVID_severity_bin1 = if_else(COVID_severity=='non_severe', 0, 
+                                  if_else(COVID_severity %in%
+c("resp_severe",'ICU_crit_care'),1, NA_real_)),
+
+COVID_severity_bin2 = if_else(COVID_severity=='resp_severe', 0, 
+                                  if_else(COVID_severity %in%
+c('ICU_crit_care'),1, NA_real_)),
+
+COVID_severity_bin3 = if_else(COVID_severity=='non_severe', 0, 
+                                  if_else(COVID_severity %in%
+c('ICU_crit_care'),1, NA_real_)),
+
+COVID_resp_bin1 = if_else(COVID_severity=='non_resp_severe', 0, 
+                                  if_else(COVID_severity %in%
+c('resp_severe','ICU_crit_care'),1, NA_real_))
+          ) %>%
+  select(desy_sort_key,patient_yob,COVID_severity,COVID_severity_bin1,COVID_severity_bin2,COVID_severity_bin3,COVID_resp_bin1, age_grp, PCV_combined,zoster_vacc,flu_vacc,race_code,comorbidities,BMI_30_plus,PPSV23_diff,PCV13_diff,PPSV23_date,PCV13_date,earliest_COVID_date,reference_year,year_month_COVID) %>%
+  collect()
+```
+##Filter out Covid(-) 
+```{r}
+a1_stream<-a1_stream[!is.na(a1_stream$earliest_COVID_date),]
+```
+
+## Create vax categories 
+```{r}
+a1_stream <- a1_stream %>% mutate(PPSV23_more5yrs = case_when(
+                       !is.na(PPSV23_date) & PPSV23_diff>5  ~ 1, 
+                       TRUE ~ 0 # This is for all other values 
+                     ),
+                    PPSV23_5yrs = case_when(
+                       !is.na(PPSV23_date) & PPSV23_diff<=5  ~ 1, 
+                       TRUE ~ 0 # This is for all other values
+                       ),
+                   PCV13 = case_when(
+                       !is.na(PCV13_date) ~ 1, 
+                       TRUE ~ 0 # This is for all other values
+                       ))
+```
+
+## Stratify by Covid-19 variant
+```{r}
+a1_stream$alpha <- 0
+a1_stream$alpha[a1_stream$year_month_COVID>="2020-09" & a1_stream$year_month_COVID<="2021-03"]<-1
+a1_stream$original <- 0
+a1_stream$original[a1_stream$year_month_COVID<"2020-09"]<-1
+a1_stream$delta <- 0
+a1_stream$delta[a1_stream$year_month_COVID>"2021-03"]<-1                     
+```
+
+## Factor variables
+```{r}
+a1 <- a1_stream %>%
+  mutate(age_grp=as.factor(age_grp),
+         PCV_combined= factor( PCV_combined, levels=c("PCV_unvacc","PCV13",'PCV_other',"PPSV23_5yrs","PCV13_PPSV23_5yrs" )),
+         zoster_vacc = as.factor(zoster_vacc),
+         flu_vacc = as.factor(flu_vacc), 
+         race_code = as.factor(race_code),
+  )
+```
+
+## Include covariate accounting for previous resp symptoms
+```{r}
+a_symp <- read.csv("./Data/yearly_resp_symptoms.csv")
+a_symp_min <- a_symp %>% 
+              group_by(desy_sort_key) %>% 
+              slice(which.min(resp_symp_year)) %>% 
+              ungroup() %>% 
+              mutate(year_COVID = year(earliest_COVID_date)) %>%
+              filter(resp_symp_year<year_COVID)
+a1_symp <- a1 %>% 
+           left_join(a_symp_min,by="desy_sort_key") %>% 
+           mutate(resp_symp=ifelse(!is.na(resp_symp_year),1,0))
+a1_symp <- a1_symp %>%
+           mutate(resp_symp = as.factor(resp_symp))
+```
+
+## Model 1: (resp severe + ICU_crit_care) vs non-severe
+```{r}
+#For mod 1, we see effects for PCV, not for zoster or flu
+#should definition be hierarchical (1+2+3 vs 2+3 vs 3)
+# Mod1: (resp severe + ICU_crit_care) vs non-severe
+mod1 <- glm(COVID_severity_bin1 ~ age_grp + PPSV23_more5yrs+PPSV23_5yrs+PCV13+alpha+delta+BMI_30_plus+comorbidities+resp_symp+race_code+BMI_30_plus, data=a1_symp, family='binomial')
+# mod1 <- glm(COVID_severity_bin1 ~ age_grp + zoster_vacc+comorbidities+race_code+BMI_30_plus, data=a1, family='binomial')
+summary(mod1)
+m.ci<-confint(mod1)
+m.table <- cbind(coef(mod1),m.ci)
+colnames(m.table) <- c("estimate","lower","upper")
+m.table <- exp(m.table)
+#Now check PCV13+PPSV23_5yrs
+est1=exp(coef(mod1)["PCV13"]+coef(mod1)["PPSV23_5yrs"])
+SE = sqrt(vcov(mod1)["PCV13","PCV13"]+vcov(mod1)["PPSV23_5yrs","PPSV23_5yrs"]+2*vcov(mod1)["PCV13","PPSV23_5yrs"])
+upper1<-est1+1.96*SE
+lower1<-est1-1.96*SE
+est1
+#Now check PCV13+PPSV23_more5yrs
+est2=exp(coef(mod1)["PCV13"]+coef(mod1)["PPSV23_more5yrs"])
+SE = sqrt(vcov(mod1)["PCV13","PCV13"]+vcov(mod1)["PPSV23_more5yrs","PPSV23_more5yrs"]+2*vcov(mod1)["PCV13","PPSV23_more5yrs"])
+upper2<-est2+1.96*SE
+lower2<-est2-1.96*SE
+est2
+```
+```{r}
+m.table.save<-m.table[c(7,8,9,10,11),]
+m.table.save<-rbind(m.table.save,c(est1,lower1,upper1),c(est2,lower2,upper2))
+row.names(m.table.save)[c(6,7)]<-c("PCVPPS","PCVPPSmore5")
+saveRDS(m.table.save,"./Results/m.table.mod1")
+```
+
+
+
+## Model 2: (resp severe + ICU_crit_care) vs non-resp-severe
+```{r}
+#Mod2: (resp severe + ICU_crit_care) vs non-resp-severe
+mod2 <- glm(COVID_resp_bin1 ~ age_grp + PPSV23_more5yrs+PPSV23_5yrs+PCV13+alpha+delta+comorbidities+BMI_30_plus+resp_symp+race_code+BMI_30_plus, data=a1_symp, family='binomial')
+# mod2 <- glm(COVID_resp_bin1 ~ age_grp + zoster_vacc+comorbidities+race_code+BMI_30_plus, data=a1, family='binomial')
+summary(mod2)
+m.ci<-confint(mod2)
+m.table <- cbind(coef(mod2),m.ci)
+colnames(m.table) <- c("estimate","lower","upper")
+m.table <- exp(m.table)
+#Now check PCV13+PPSV23_5yrs
+est1=exp(coef(mod2)["PCV13"]+coef(mod2)["PPSV23_5yrs"])
+SE = sqrt(vcov(mod2)["PCV13","PCV13"]+vcov(mod2)["PPSV23_5yrs","PPSV23_5yrs"]+2*vcov(mod2)["PCV13","PPSV23_5yrs"])
+upper1<-est1+1.96*SE
+lower1<-est1-1.96*SE
+est1
+#Now check PCV13+PPSV23_more5yrs
+est2=exp(coef(mod2)["PCV13"]+coef(mod2)["PPSV23_more5yrs"])
+SE = sqrt(vcov(mod2)["PCV13","PCV13"]+vcov(mod2)["PPSV23_more5yrs","PPSV23_more5yrs"]+2*vcov(mod2)["PCV13","PPSV23_more5yrs"])
+upper2<-est2+1.96*SE
+lower2<-est2-1.96*SE
+est2
+```
+```{r}
+m.table.save<-m.table[c(7,8,9,10,11),]
+m.table.save<-rbind(m.table.save,c(est1,lower1,upper1),c(est2,lower2,upper2))
+row.names(m.table.save)[c(6,7)]<-c("PCVPPS","PCVPPSmore5")
+saveRDS(m.table.save,"./Results/m.table.mod2")
+```
+
+## Model 3: ICU crit care vs resp severe
+```{r}
+#for mod 3, we see effects fo PCV AND zoster AND fly; suggesting bias (should look at flu prevalence during this period)
+#Mod2: ICU crit care vs resp severe
+mod3 <- glm(COVID_severity_bin2 ~ age_grp +PPSV23_more5yrs+PPSV23_5yrs+PCV13+alpha+delta+resp_symp+BMI_30_plus+comorbidities+race_code+BMI_30_plus, data=a1_symp, family='binomial')
+# mod3 <- glm(COVID_severity_bin2 ~ age_grp +zoster_vacc+comorbidities+race_code+BMI_30_plus, data=a1, family='binomial')
+summary(mod3)
+m.ci<-confint(mod3)
+m.table <- cbind(coef(mod3),m.ci)
+colnames(m.table) <- c("estimate","lower","upper")
+m.table <- exp(m.table)
+#Now check PCV13+PPSV23_5yrs
+est1=exp(coef(mod3)["PCV13"]+coef(mod3)["PPSV23_5yrs"])
+SE = sqrt(vcov(mod3)["PCV13","PCV13"]+vcov(mod3)["PPSV23_5yrs","PPSV23_5yrs"]+2*vcov(mod3)["PCV13","PPSV23_5yrs"])
+upper1<-est1+1.96*SE
+lower1<-est1-1.96*SE
+est1
+#Now check PCV13+PPSV23_more5yrs
+est2=exp(coef(mod3)["PCV13"]+coef(mod3)["PPSV23_more5yrs"])
+SE = sqrt(vcov(mod3)["PCV13","PCV13"]+vcov(mod3)["PPSV23_more5yrs","PPSV23_more5yrs"]+2*vcov(mod3)["PCV13","PPSV23_more5yrs"])
+upper2<-est2+1.96*SE
+lower2<-est2-1.96*SE
+est2
+```
+```{r}
+m.table.save<-m.table[c(7,8,9,10,11),]
+m.table.save<-rbind(m.table.save,c(est1,lower1,upper1),c(est2,lower2,upper2))
+row.names(m.table.save)[c(6,7)]<-c("PCVPPS","PCVPPSmore5")
+saveRDS(m.table.save,"./Results/m.table.mod3")
+```
+
+
+## Model 4: ICU crit care vs non severe
+```{r}
+#Mod4: ICU crit care vs non-severe
+mod4 <- glm(COVID_severity_bin3 ~ age_grp +PPSV23_more5yrs+PPSV23_5yrs+PCV13+alpha+delta+resp_symp+BMI_30_plus+comorbidities+race_code+BMI_30_plus, data=a1_symp, family='binomial')
+# mod3 <- glm(COVID_severity_bin2 ~ age_grp +zoster_vacc+comorbidities+race_code+BMI_30_plus, data=a1, family='binomial')
+summary(mod4)
+m.ci<-confint(mod4)
+m.table <- cbind(coef(mod4),m.ci)
+colnames(m.table) <- c("estimate","lower","upper")
+m.table <- exp(m.table)
+#Now check PCV13+PPSV23_5yrs
+est1=exp(coef(mod4)["PCV13"]+coef(mod4)["PPSV23_5yrs"])
+SE = sqrt(vcov(mod4)["PCV13","PCV13"]+vcov(mod4)["PPSV23_5yrs","PPSV23_5yrs"]+2*vcov(mod4)["PCV13","PPSV23_5yrs"])
+upper1<-est1+1.96*SE
+lower1<-est1-1.96*SE
+est1
+#Now check PCV13+PPSV23_more5yrs
+est2=exp(coef(mod4)["PCV13"]+coef(mod4)["PPSV23_more5yrs"])
+SE = sqrt(vcov(mod4)["PCV13","PCV13"]+vcov(mod4)["PPSV23_more5yrs","PPSV23_more5yrs"]+2*vcov(mod4)["PCV13","PPSV23_more5yrs"])
+upper2<-est2+1.96*SE
+lower2<-est2-1.96*SE
+est2
+```
+```{r}
+m.table.save<-m.table[c(7,8,9,10,11),]
+m.table.save<-rbind(m.table.save,c(est1,lower1,upper1),c(est2,lower2,upper2))
+row.names(m.table.save)[c(6,7)]<-c("PCVPPS","PCVPPSmore5")
+saveRDS(m.table.save,"./Results/m.table.mod4")
+```
+
+
+
+```{r}
+mod4 <- glm(COVID_severity_bin3 ~ age_grp +zoster_vacc+alpha+delta+resp_symp+comorbidities+race_code+BMI_30_plus, data=a1_symp, family='binomial')
+# mod3 <- glm(COVID_severity_bin2 ~ age_grp +zoster_vacc+comorbidities+race_code+BMI_30_plus, data=a1, family='binomial')
+summary(mod4)
+m.ci<-confint(mod4)
+m.table <- cbind(coef(mod4),m.ci)
+colnames(m.table) <- c("estimate","lower","upper")
+m.table <- exp(m.table)
+```
+
+
+
+
+
+
+
+
+#Prepare summary table: 
+```{r}
+a1_summary <- a1_symp %>% select(COVID_severity_bin1,COVID_severity_bin2,
+                            COVID_resp_bin1,age_grp,resp_symp,PCV13,PPSV23_5yrs,PPSV23_more5yrs,zoster_vacc,flu_vacc,race_code, comorbidities,BMI_30_plus)
+a1_summary$PCV_combined = NA
+a1_summary$PCV_combined[a1_summary$PCV13==1 & a1_summary$PPSV23_5yrs==0 & a1_summary$PPSV23_more5yrs==0] <- "PCV13_only"
+a1_summary$PCV_combined[a1_summary$PCV13==1 & a1_summary$PPSV23_5yrs==1 ] <- "PCV13+PPSV23"
+a1_summary$PCV_combined[a1_summary$PCV13==1 & a1_summary$PPSV23_more5yrs==1 ] <- "PCV13+PPSV23more5yrs"
+a1_summary$PCV_combined[a1_summary$PPSV23_5yrs==1 & a1_summary$PCV13==0] <- "PPSV23_5yrs_only"
+a1_summary$PCV_combined[a1_summary$PPSV23_more5yrs==1 & a1_summary$PCV13==0] <- "PPSV23_more5yrs_only"
+a1_summary$PCV_combined[is.na(a1$PPSV23_date) & is.na(a1$PCV13_date)] <- "PCV_unvacc"
+a1_summary<-a1_summary %>% select(COVID_severity_bin1,COVID_severity_bin2,COVID_resp_bin1,age_grp,resp_symp,PCV_combined,zoster_vacc,flu_vacc,race_code,comorbidities,BMI_30_plus)
+st(a1_summary,group="PCV_combined")
+```
+
+```{r}
+a1_summary <- a1_symp %>% select(COVID_severity_bin1,COVID_severity_bin2,
+                            COVID_resp_bin1,age_grp,resp_symp,PCV13,PPSV23_5yrs,PPSV23_more5yrs,zoster_vacc,flu_vacc,race_code,
+                            comorbidities)
+a1_summ <- a1_summary %>%
+  dplyr::count(PCV13,PPSV23_5yrs,PPSV23_more5yrs) %>% 
+  mutate(prop=prop.table(n))
+```
+
+
+
+
+
+```{r}
+a1_summary <- a1_symp %>% select(COVID_severity_bin1,COVID_severity_bin2,
+                            COVID_resp_bin1,age_grp,resp_symp,PCV13,PPSV23_5yrs,PPSV23_more5yrs,zoster_vacc,flu_vacc,race_code,
+                            comorbidities)
+a1_summary$PCV_combined = NA
+a1_summary$PCV_combined[(a1_summary$PCV13==1 & a1_summary$PPSV23_5yrs==1) |  (a1_summary$PCV13==1)] <- "PCV13 w/PPSV23"
+a1_summary$PCV_combined[(a1_summary$PCV13==1 & a1_summary$PPSV23_more5yrs==1) |  (a1_summary$PCV13==1)] <- "PCV13 w/PPSV23more5yrs"
+a1_summary$PCV_combined[(a1_summary$PCV13==1 & a1_summary$PPSV23_5yrs==1) |  (a1_summary$PPSV23_5yrs==1)] <- "PPSV23 w/ PCV13"
+a1_summary$PCV_combined[(a1_summary$PCV13==1 & a1_summary$PPSV23_more5yrs==1) |  (a1_summary$PPSV23_more5yrs==1)] <- "PPSV23more5yrs w/ PCV13"
+a1_summary$PCV_combined[is.na(a1$PPSV23_date) & is.na(a1$PCV13_date)] <- "PCV_unvacc"
+a1_summary<-a1_summary %>% select(COVID_severity_bin1,COVID_severity_bin2,COVID_resp_bin1,age_grp,resp_symp,PCV_combined,zoster_vacc,flu_vacc,race_code,comorbidities)
+st(a1_summary,group="PCV_combined")
+```
+
+
+
+
+
+
